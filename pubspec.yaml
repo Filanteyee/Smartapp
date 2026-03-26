@@ -1,0 +1,57 @@
+name: car_rental_app
+description: A simple car rental app demonstrating Flutter widgets
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.2
+  sqflite: ^2.3.2
+  path: ^1.8.3
+  path_provider: ^2.1.2
+  google_fonts: ^8.0.2
+  flutter_animate: ^4.5.0
+  table_calendar: ^3.0.9
+  shared_preferences: ^2.2.2
+  provider: ^6.1.1
+  intl: ^0.18.1
+  firebase_core: ^3.13.0
+  cloud_firestore: ^5.6.0
+  firebase_auth: ^5.5.0
+  google_maps_flutter: ^2.5.0
+  geolocator: ^10.1.0
+  permission_handler: ^11.0.1
+  geocoding: ^2.1.0
+  image_picker: ^1.1.2
+  firebase_storage: ^12.4.5
+  file_picker: ^8.1.6
+  supabase_flutter: ^2.5.6
+
+
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.2
+  flutter_launcher_icons: ^0.13.1
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/banner.png
+    - assets/images/cars/
+    - assets/images/i.webp
+    - assets/images/lottie/loading_animation.json
+
+flutter_icons:
+  android: true
+  ios: true
+  image_path: "assets/img.png"
+
+flutter_launcher_name:
+  name: "SmartResidency"
