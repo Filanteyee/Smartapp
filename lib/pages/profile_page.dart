@@ -1,5 +1,5 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 
 import '../services/auth_service.dart';
 import 'login_page.dart';
@@ -11,12 +11,12 @@ class ProfilePage extends StatelessWidget {
 
   String _roleLabel(String role) {
     switch (role) {
-      case 'admin':
-        return 'Администратор';
-      case 'resident':
-        return 'Житель';
+      case 'owner':
+        return 'Владелец';
+      case 'tenant':
+        return 'Арендатор';
       default:
-        return 'Не указано';
+        return 'Не подтверждён';
     }
   }
 
@@ -28,30 +28,9 @@ class ProfilePage extends StatelessWidget {
         return 'Подтверждено';
       case 'rejected':
         return 'Отклонено';
-      case 'not_submitted':
       default:
         return 'Не отправлено';
     }
-  }
-
-  String _roleDescription(String role, String verificationStatus) {
-    if (role == 'admin') {
-      return 'Права администратора: просмотр заявок, смена статусов и доступ к управлению системой.';
-    }
-
-    if (verificationStatus == 'approved') {
-      return 'Ваш статус подтверждён. Доступен основной функционал приложения.';
-    }
-
-    if (verificationStatus == 'pending') {
-      return 'Ваши документы находятся на проверке. Пока доступен базовый функционал.';
-    }
-
-    if (verificationStatus == 'rejected') {
-      return 'Проверка была отклонена. Вы можете отправить документы повторно.';
-    }
-
-    return 'Вы ещё не подтверждены. Пока доступен базовый функционал.';
   }
 
   @override
@@ -60,7 +39,7 @@ class ProfilePage extends StatelessWidget {
 
     return Scaffold(
       body: SafeArea(
-        child: StreamBuilder<supabase.User?>(
+        child: StreamBuilder<User?>(
           stream: auth.authStateChanges,
           builder: (context, snapshot) {
             final user = snapshot.data;
@@ -134,21 +113,10 @@ class ProfilePage extends StatelessWidget {
             return FutureBuilder<Map<String, dynamic>?>(
               future: auth.getCurrentUserProfile(),
               builder: (context, profileSnapshot) {
-                if (profileSnapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                final data = profileSnapshot.data ?? <String, dynamic>{};
-
-                final role = (data['role'] ?? 'resident').toString();
+                final data = profileSnapshot.data ?? {};
+                final role = (data['residentRole'] ?? 'unverified').toString();
                 final verificationStatus =
-                (data['verification_status'] ?? 'not_submitted').toString();
-
-                final fullName =
-                (data['full_name'] ?? user.email ?? 'Пользователь')
-                    .toString();
-
-                final phone = (data['phone'] ?? '').toString();
+                (data['verificationStatus'] ?? 'not_submitted').toString();
 
                 return ListView(
                   padding: const EdgeInsets.all(16),
@@ -169,13 +137,14 @@ class ProfilePage extends StatelessWidget {
                             ),
                             const SizedBox(height: 12),
                             Text(
-                              fullName,
+                              data['fullName'] ?? user.displayName ?? 'Пользователь',
                               style: Theme.of(context).textTheme.titleMedium,
                             ),
                             const SizedBox(height: 6),
                             Text(user.email ?? ''),
                             const SizedBox(height: 6),
-                            if (phone.isNotEmpty) Text(phone),
+                            if ((data['phone'] ?? '').toString().isNotEmpty)
+                              Text(data['phone']),
                           ],
                         ),
                       ),
@@ -199,7 +168,7 @@ class ProfilePage extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    if (role != 'admin' && verificationStatus != 'approved')
+                    if (role == 'unverified' || verificationStatus != 'approved')
                       SizedBox(
                         width: double.infinity,
                         child: FilledButton(
@@ -207,24 +176,27 @@ class ProfilePage extends StatelessWidget {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (_) =>
-                                const OwnershipVerificationPage(),
+                                builder: (_) => const OwnershipVerificationPage(),
                               ),
                             );
                           },
-                          child: Text(
-                            verificationStatus == 'rejected'
-                                ? 'Отправить повторно'
-                                : 'Подтвердить статус',
-                          ),
+                          child: const Text('Подтвердить статус'),
                         ),
                       ),
                     const SizedBox(height: 12),
                     Card(
                       child: Padding(
                         padding: const EdgeInsets.all(16),
-                        child: Text(
-                          _roleDescription(role, verificationStatus),
+                        child: role == 'owner'
+                            ? const Text(
+                          'Права владельца: полный доступ к платежам, гостям, документам и управлению квартирой.',
+                        )
+                            : role == 'tenant'
+                            ? const Text(
+                          'Права арендатора: доступ к заявкам, объявлениям, сервисам. Ограниченный доступ к разделам собственника.',
+                        )
+                            : const Text(
+                          'Вы ещё не подтверждены. Пока доступен базовый функционал.',
                         ),
                       ),
                     ),

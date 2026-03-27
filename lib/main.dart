@@ -1,5 +1,5 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/app_state.dart';
 import 'core/app_state_scope.dart';
@@ -8,12 +8,7 @@ import 'theme/app_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  await Supabase.initialize(
-    url: 'https://azbiqlixqmwqsfmpdlmy.supabase.co',
-    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF6YmlxbGl4cW13cXNmbXBkbG15Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ1MjU5NTQsImV4cCI6MjA5MDEwMTk1NH0.v64jUU9bAppXzkyzypkYkSKSnU71gVCKbvJD3T6W2zg',
-  );
-
+  await Firebase.initializeApp();
   runApp(const _Root());
 }
 

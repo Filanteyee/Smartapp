@@ -43,7 +43,7 @@
         <!-- Добавление API ключа Google Maps -->
         <meta-data
             android:name="com.google.android.geo.API_KEY"
-            android:value="AIzaSyAnBNmndSikwTvu2NWwzzAZnfaI4g3WnX0" />
+            android:value="AIzaSyAHDlIBABDE1aJPYrmlh9TZWxiU-jtTgSs"/>
 
     </application>
 
