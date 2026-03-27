@@ -11,7 +11,7 @@ class RegisterFlowPage extends StatefulWidget {
 }
 
 class _RegisterFlowPageState extends State<RegisterFlowPage> {
-  static const Color _accent = Color(0xFFF9793D);
+  static const Color _accent = Color(0xFFB9FF66);
   static const Color _green = Color(0xFF35C84A);
 
   final AuthService _authService = AuthService();
@@ -187,27 +187,24 @@ class _RegisterFlowPageState extends State<RegisterFlowPage> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F7F7),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: const Color(0xFFF7F7F7),
-        foregroundColor: _accent,
-        elevation: 0,
-        title: const Text(
-          'Регистрация',
-          style: TextStyle(color: Colors.black),
-        ),
+        title: const Text('Регистрация'),
       ),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
           children: [
             if (_step >= 1) _StepDots(step: _step),
-            const SizedBox(height: 10),
-            if (_step == 0) _buildPhoneStep(),
-            if (_step == 1) _buildIinStep(),
-            if (_step == 2) _buildAddressStep(),
-            if (_step == 3) _buildAccountStep(),
+            const SizedBox(height: 12),
+            if (_step == 0) _buildPhoneStep(colors, text),
+            if (_step == 1) _buildIinStep(colors, text),
+            if (_step == 2) _buildAddressStep(colors, text),
+            if (_step == 3) _buildAccountStep(colors, text),
           ],
         ),
       ),
@@ -218,9 +215,9 @@ class _RegisterFlowPageState extends State<RegisterFlowPage> {
           child: FilledButton(
             style: FilledButton.styleFrom(
               backgroundColor: _accent,
-              foregroundColor: Colors.white,
+              foregroundColor: Colors.black,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(18),
               ),
             ),
             onPressed: _loading ? null : (_step == 3 ? _submit : _next),
@@ -235,26 +232,23 @@ class _RegisterFlowPageState extends State<RegisterFlowPage> {
     );
   }
 
-  Widget _buildPhoneStep() {
+  Widget _buildPhoneStep(ColorScheme colors, TextTheme text) {
     return Column(
       children: [
-        const SizedBox(height: 30),
-        const Text(
+        const SizedBox(height: 28),
+        Text(
           'Добро пожаловать',
           textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 24,
+          style: text.headlineSmall?.copyWith(
             fontWeight: FontWeight.w700,
-            color: Colors.black,
           ),
         ),
         const SizedBox(height: 8),
-        const Text(
+        Text(
           'Чтобы продолжить, заполните поле ниже',
           textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 16,
-            color: Colors.black54,
+          style: text.bodyLarge?.copyWith(
+            color: colors.onSurfaceVariant,
           ),
         ),
         const SizedBox(height: 30),
@@ -263,7 +257,7 @@ class _RegisterFlowPageState extends State<RegisterFlowPage> {
           label: 'Номер телефона',
           keyboardType: TextInputType.phone,
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -276,14 +270,14 @@ class _RegisterFlowPageState extends State<RegisterFlowPage> {
                 });
               },
             ),
-            const Expanded(
+            Expanded(
               child: Padding(
-                padding: EdgeInsets.only(top: 12),
+                padding: const EdgeInsets.only(top: 12),
                 child: Text(
                   'Я даю согласие на сбор и обработку персональных данных',
-                  style: TextStyle(
-                    color: Colors.black87,
-                    fontSize: 15,
+                  style: text.bodyMedium?.copyWith(
+                    color: colors.onSurface,
+                    height: 1.4,
                   ),
                 ),
               ),
@@ -302,14 +296,14 @@ class _RegisterFlowPageState extends State<RegisterFlowPage> {
                 });
               },
             ),
-            const Expanded(
+            Expanded(
               child: Padding(
-                padding: EdgeInsets.only(top: 12),
+                padding: const EdgeInsets.only(top: 12),
                 child: Text(
                   'Я принимаю условия пользовательского соглашения',
-                  style: TextStyle(
-                    color: Colors.black87,
-                    fontSize: 15,
+                  style: text.bodyMedium?.copyWith(
+                    color: colors.onSurface,
+                    height: 1.4,
                   ),
                 ),
               ),
@@ -320,51 +314,64 @@ class _RegisterFlowPageState extends State<RegisterFlowPage> {
     );
   }
 
-  Widget _buildIinStep() {
+  Widget _buildIinStep(ColorScheme colors, TextTheme text) {
     return Column(
       children: [
-        const SizedBox(height: 24),
-        const Text(
+        const SizedBox(height: 20),
+        Text(
           'Введите ИИН',
           textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 24,
+          style: text.headlineSmall?.copyWith(
             fontWeight: FontWeight.w700,
-            color: Colors.black,
           ),
         ),
         const SizedBox(height: 8),
-        const Text(
+        Text(
           'Необходимо ввести только свой ИИН.\nИспользование чужого ИИН запрещено.',
           textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 16,
-            color: Colors.black87,
+          style: text.bodyLarge?.copyWith(
+            color: colors.onSurfaceVariant,
             height: 1.5,
           ),
         ),
         const SizedBox(height: 28),
-        RadioListTile<bool>(
-          value: true,
-          groupValue: _isIndividual,
-          activeColor: _accent,
-          onChanged: (v) {
-            setState(() {
-              _isIndividual = v ?? true;
-            });
-          },
-          title: const Text('Физическое лицо'),
-        ),
-        RadioListTile<bool>(
-          value: false,
-          groupValue: _isIndividual,
-          activeColor: _accent,
-          onChanged: (v) {
-            setState(() {
-              _isIndividual = v ?? false;
-            });
-          },
-          title: const Text('Юридическое лицо'),
+        Card(
+          child: Column(
+            children: [
+              RadioListTile<bool>(
+                value: true,
+                groupValue: _isIndividual,
+                activeColor: _accent,
+                onChanged: (v) {
+                  setState(() {
+                    _isIndividual = v ?? true;
+                  });
+                },
+                title: Text(
+                  'Физическое лицо',
+                  style: text.bodyLarge?.copyWith(
+                    color: colors.onSurface,
+                  ),
+                ),
+              ),
+              RadioListTile<bool>(
+                value: false,
+                groupValue: _isIndividual,
+                activeColor: _accent,
+                onChanged: (v) {
+                  setState(() {
+                    _isIndividual = v ?? false;
+                  });
+                },
+                title: Text(
+                  'Юридическое лицо',
+                  style: text.bodyLarge?.copyWith(
+                    color: colors.onSurface,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: 20),
         _LightField(
@@ -376,26 +383,23 @@ class _RegisterFlowPageState extends State<RegisterFlowPage> {
     );
   }
 
-  Widget _buildAddressStep() {
+  Widget _buildAddressStep(ColorScheme colors, TextTheme text) {
     return Column(
       children: [
         const SizedBox(height: 18),
-        const Text(
+        Text(
           'Адрес собственности',
           textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 24,
+          style: text.headlineSmall?.copyWith(
             fontWeight: FontWeight.w700,
-            color: Colors.black,
           ),
         ),
         const SizedBox(height: 8),
-        const Text(
+        Text(
           'Выберите адрес через карту',
           textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 16,
-            color: Colors.black54,
+          style: text.bodyLarge?.copyWith(
+            color: colors.onSurfaceVariant,
           ),
         ),
         const SizedBox(height: 28),
@@ -415,12 +419,18 @@ class _RegisterFlowPageState extends State<RegisterFlowPage> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.location_on_outlined),
+                  Icon(
+                    Icons.location_on_outlined,
+                    color: colors.primary,
+                  ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       _selectedAddress!,
-                      style: const TextStyle(fontSize: 15),
+                      style: text.bodyMedium?.copyWith(
+                        color: colors.onSurface,
+                        height: 1.4,
+                      ),
                     ),
                   ),
                 ],
@@ -431,26 +441,23 @@ class _RegisterFlowPageState extends State<RegisterFlowPage> {
     );
   }
 
-  Widget _buildAccountStep() {
+  Widget _buildAccountStep(ColorScheme colors, TextTheme text) {
     return Column(
       children: [
         const SizedBox(height: 18),
-        const Text(
+        Text(
           'Создать аккаунт',
           textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 24,
+          style: text.headlineSmall?.copyWith(
             fontWeight: FontWeight.w700,
-            color: Colors.black,
           ),
         ),
         const SizedBox(height: 8),
-        const Text(
+        Text(
           'ФИО, email и пароль',
           textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 16,
-            color: Colors.black54,
+          style: text.bodyLarge?.copyWith(
+            color: colors.onSurfaceVariant,
           ),
         ),
         const SizedBox(height: 28),
@@ -477,7 +484,7 @@ class _RegisterFlowPageState extends State<RegisterFlowPage> {
             },
             icon: Icon(
               _obscure1 ? Icons.visibility_off : Icons.visibility,
-              color: Colors.grey,
+              color: colors.onSurfaceVariant,
             ),
           ),
         ),
@@ -494,7 +501,7 @@ class _RegisterFlowPageState extends State<RegisterFlowPage> {
             },
             icon: Icon(
               _obscure2 ? Icons.visibility_off : Icons.visibility,
-              color: Colors.grey,
+              color: colors.onSurfaceVariant,
             ),
           ),
         ),
@@ -510,6 +517,8 @@ class _StepDots extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+
     Widget dot(int index, Color color) {
       return Row(
         children: [
@@ -523,8 +532,10 @@ class _StepDots extends StatelessWidget {
             alignment: Alignment.center,
             child: Text(
               '${index + 1}',
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: color == Colors.grey.shade300
+                    ? colors.onSurfaceVariant
+                    : Colors.white,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -533,7 +544,7 @@ class _StepDots extends StatelessWidget {
             Container(
               width: 28,
               height: 3,
-              color: Colors.grey.shade300,
+              color: colors.outline.withOpacity(0.35),
             ),
         ],
       );
@@ -582,25 +593,39 @@ class _LightField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+
     return TextField(
       controller: controller,
       keyboardType: keyboardType,
       obscureText: obscureText,
+      style: TextStyle(
+        color: colors.onSurface,
+        fontSize: 15,
+        fontWeight: FontWeight.w500,
+      ),
       decoration: InputDecoration(
         labelText: label,
         filled: true,
-        fillColor: Colors.white,
+        fillColor: colors.surface,
         suffixIcon: suffix,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 18,
           vertical: 18,
         ),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(18),
         ),
         enabledBorder: OutlineInputBorder(
-          borderSide: const BorderSide(color: Color(0xFFD9D9D9)),
-          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: colors.outline),
+          borderRadius: BorderRadius.circular(18),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderSide: BorderSide(
+            color: colors.primary,
+            width: 1.6,
+          ),
+          borderRadius: BorderRadius.circular(18),
         ),
       ),
     );

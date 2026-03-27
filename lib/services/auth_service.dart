@@ -1,18 +1,15 @@
 import 'dart:io';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 
 class AuthService {
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseStorage _storage = FirebaseStorage.instance;
+  final supabase.SupabaseClient _supabase = supabase.Supabase.instance.client;
 
-  Stream<User?> get authStateChanges => _auth.authStateChanges();
+  Stream<supabase.User?> get authStateChanges =>
+      _supabase.auth.onAuthStateChange.map((event) => event.session?.user);
 
-  User? get currentUser => _auth.currentUser;
+  supabase.User? get currentUser => _supabase.auth.currentUser;
 
   Future<String?> registerResident({
     required String fullName,
@@ -28,49 +25,61 @@ class AuthService {
     required String fullAddress,
   }) async {
     try {
-      final credential = await _auth.createUserWithEmailAndPassword(
+      final response = await _supabase.auth.signUp(
         email: email.trim(),
         password: password.trim(),
+        data: {
+          'full_name': fullName.trim(),
+          'phone': phone.trim(),
+          'iin': iin.trim(),
+          'person_type': personType,
+          'city': city,
+          'street': street,
+          'property_type': propertyType,
+          'property_number': propertyNumber,
+          'full_address': fullAddress.trim(),
+          'role': 'resident',
+        },
       );
 
-      final user = credential.user;
+      final user = response.user;
       if (user == null) {
         return 'Не удалось создать пользователя';
       }
 
-      await user.updateDisplayName(fullName.trim());
-
-      await _firestore.collection('users').doc(user.uid).set({
-        'uid': user.uid,
-        'fullName': fullName.trim(),
+      await _supabase.from('profiles').update({
+        'full_name': fullName.trim(),
         'email': email.trim(),
         'phone': phone.trim(),
         'iin': iin.trim(),
-        'personType': personType,
+        'person_type': personType,
         'city': city,
         'street': street,
-        'propertyType': propertyType,
-        'propertyNumber': propertyNumber,
-        'address': fullAddress,
-        'verificationStatus': 'not_submitted',
-        'residentRole': 'unverified',
-        'createdAt': FieldValue.serverTimestamp(),
-      });
+        'property_type': propertyType,
+        'property_number': propertyNumber,
+        'full_address': fullAddress.trim(),
+        'role': 'resident',
+        'verification_status': 'not_submitted',
+      }).eq('id', user.id);
 
       return null;
-    } on FirebaseAuthException catch (e) {
-      switch (e.code) {
-        case 'email-already-in-use':
-          return 'Этот email уже используется';
-        case 'invalid-email':
-          return 'Некорректный email';
-        case 'weak-password':
-          return 'Слишком слабый пароль';
-        case 'operation-not-allowed':
-          return 'В Firebase не включён Email/Password';
-        default:
-          return e.message ?? 'Ошибка регистрации';
+    } on supabase.AuthException catch (e) {
+      final message = e.message.toLowerCase();
+
+      if (message.contains('already registered') ||
+          message.contains('user already registered')) {
+        return 'Этот email уже используется';
       }
+
+      if (message.contains('invalid email')) {
+        return 'Некорректный email';
+      }
+
+      if (message.contains('password')) {
+        return 'Слишком слабый пароль';
+      }
+
+      return e.message;
     } catch (e) {
       return 'Неизвестная ошибка: $e';
     }
@@ -81,38 +90,47 @@ class AuthService {
     required String password,
   }) async {
     try {
-      await _auth.signInWithEmailAndPassword(
+      await _supabase.auth.signInWithPassword(
         email: email.trim(),
         password: password.trim(),
       );
       return null;
-    } on FirebaseAuthException catch (e) {
-      switch (e.code) {
-        case 'user-not-found':
-          return 'Пользователь не найден';
-        case 'wrong-password':
-        case 'invalid-credential':
-          return 'Неверный email или пароль';
-        case 'invalid-email':
-          return 'Некорректный email';
-        default:
-          return e.message ?? 'Ошибка входа';
+    } on supabase.AuthException catch (e) {
+      final message = e.message.toLowerCase();
+
+      if (message.contains('invalid login credentials')) {
+        return 'Неверный email или пароль';
       }
+
+      if (message.contains('email not confirmed')) {
+        return 'Подтвердите email перед входом';
+      }
+
+      if (message.contains('invalid email')) {
+        return 'Некорректный email';
+      }
+
+      return e.message;
     } catch (e) {
       return 'Неизвестная ошибка: $e';
     }
   }
 
   Future<void> signOut() async {
-    await _auth.signOut();
+    await _supabase.auth.signOut();
   }
 
   Future<Map<String, dynamic>?> getCurrentUserProfile() async {
-    final user = _auth.currentUser;
+    final user = _supabase.auth.currentUser;
     if (user == null) return null;
 
-    final doc = await _firestore.collection('users').doc(user.uid).get();
-    return doc.data();
+    final data = await _supabase
+        .from('profiles')
+        .select()
+        .eq('id', user.id)
+        .maybeSingle();
+
+    return data;
   }
 
   Future<String?> submitVerificationRequest({
@@ -121,44 +139,49 @@ class AuthService {
     String? comment,
   }) async {
     try {
-      final user = _auth.currentUser;
+      final user = _supabase.auth.currentUser;
       if (user == null) return 'Сначала войдите в аккаунт';
 
       if (documents.isEmpty) {
         return 'Прикрепите хотя бы один документ';
       }
 
-      final uploadedDocs = <Map<String, dynamic>>[];
+      final verificationRequest = await _supabase
+          .from('verification_requests')
+          .insert({
+        'user_id': user.id,
+        'requested_role': requestedRole,
+        'comment': comment?.trim() ?? '',
+        'status': 'pending',
+      })
+          .select()
+          .single();
+
+      final verificationRequestId = verificationRequest['id'] as String;
 
       for (final doc in documents) {
         if (doc.path == null) continue;
 
-        final ref = _storage
-            .ref()
-            .child('verification_docs/${user.uid}/${DateTime.now().millisecondsSinceEpoch}_${doc.name}');
+        final file = File(doc.path!);
+        final fileName =
+            '${DateTime.now().millisecondsSinceEpoch}_${doc.name}';
+        final filePath = '${user.id}/$fileName';
 
-        await ref.putFile(File(doc.path!));
-        final url = await ref.getDownloadURL();
+        await _supabase.storage
+            .from('verification-docs')
+            .upload(filePath, file);
 
-        uploadedDocs.add({
-          'name': doc.name,
-          'url': url,
-          'size': doc.size,
+        await _supabase.from('verification_documents').insert({
+          'verification_request_id': verificationRequestId,
+          'file_path': filePath,
+          'file_name': doc.name,
+          'file_size': doc.size,
         });
       }
 
-      await _firestore.collection('verification_requests').doc(user.uid).set({
-        'uid': user.uid,
-        'requestedRole': requestedRole,
-        'comment': comment?.trim() ?? '',
-        'documents': uploadedDocs,
-        'status': 'pending',
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-
-      await _firestore.collection('users').doc(user.uid).update({
-        'verificationStatus': 'pending',
-      });
+      await _supabase.from('profiles').update({
+        'verification_status': 'pending',
+      }).eq('id', user.id);
 
       return null;
     } catch (e) {

@@ -1,22 +1,42 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 
 import '../services/auth_service.dart';
 import 'login_page.dart';
 import 'ownership_verification_page.dart';
 import 'register_flow_page.dart';
 
-class ProfilePage extends StatelessWidget {
+class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
+
+  @override
+  State<ProfilePage> createState() => _ProfilePageState();
+}
+
+class _ProfilePageState extends State<ProfilePage> {
+  final AuthService _auth = AuthService();
+  Future<Map<String, dynamic>?>? _profileFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _reloadProfile();
+  }
+
+  void _reloadProfile() {
+    setState(() {
+      _profileFuture = _auth.getCurrentUserProfile();
+    });
+  }
 
   String _roleLabel(String role) {
     switch (role) {
-      case 'owner':
-        return 'Владелец';
-      case 'tenant':
-        return 'Арендатор';
+      case 'admin':
+        return 'Администратор';
+      case 'resident':
+        return 'Житель';
       default:
-        return 'Не подтверждён';
+        return 'Не указано';
     }
   }
 
@@ -28,21 +48,78 @@ class ProfilePage extends StatelessWidget {
         return 'Подтверждено';
       case 'rejected':
         return 'Отклонено';
+      case 'not_submitted':
       default:
         return 'Не отправлено';
     }
   }
 
+  String _roleDescription(String role, String verificationStatus) {
+    if (role == 'admin') {
+      return 'Вы вошли как администратор. Вам доступны просмотр заявок, смена их статусов и дальнейшее управление сервисной частью приложения.';
+    }
+
+    if (verificationStatus == 'approved') {
+      return 'Ваш статус подтверждён. Основной функционал доступен.';
+    }
+
+    if (verificationStatus == 'pending') {
+      return 'Ваши документы отправлены и сейчас находятся на проверке.';
+    }
+
+    if (verificationStatus == 'rejected') {
+      return 'Проверка была отклонена. Вы можете отправить документы повторно.';
+    }
+
+    return 'Вы ещё не отправляли документы на подтверждение статуса.';
+  }
+
+  Color _verificationColor(BuildContext context, String status) {
+    switch (status) {
+      case 'approved':
+        return Colors.green;
+      case 'pending':
+        return Colors.orange;
+      case 'rejected':
+        return Colors.red;
+      default:
+        return Theme.of(context).colorScheme.outline;
+    }
+  }
+
+  IconData _verificationIcon(String status) {
+    switch (status) {
+      case 'approved':
+        return Icons.verified;
+      case 'pending':
+        return Icons.hourglass_top_rounded;
+      case 'rejected':
+        return Icons.cancel_outlined;
+      default:
+        return Icons.help_outline;
+    }
+  }
+
+  Future<void> _openVerificationPage() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const OwnershipVerificationPage(),
+      ),
+    );
+
+    if (!mounted) return;
+    _reloadProfile();
+  }
+
   @override
   Widget build(BuildContext context) {
-    final auth = AuthService();
-
     return Scaffold(
       body: SafeArea(
-        child: StreamBuilder<User?>(
-          stream: auth.authStateChanges,
-          builder: (context, snapshot) {
-            final user = snapshot.data;
+        child: StreamBuilder<supabase.User?>(
+          stream: _auth.authStateChanges,
+          builder: (context, authSnapshot) {
+            final user = authSnapshot.data;
 
             if (user == null) {
               return ListView(
@@ -111,106 +188,168 @@ class ProfilePage extends StatelessWidget {
             }
 
             return FutureBuilder<Map<String, dynamic>?>(
-              future: auth.getCurrentUserProfile(),
+              future: _profileFuture,
               builder: (context, profileSnapshot) {
-                final data = profileSnapshot.data ?? {};
-                final role = (data['residentRole'] ?? 'unverified').toString();
-                final verificationStatus =
-                (data['verificationStatus'] ?? 'not_submitted').toString();
+                if (profileSnapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(
+                    child: CircularProgressIndicator(),
+                  );
+                }
 
-                return ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    Text(
-                      'Профиль',
-                      style: Theme.of(context).textTheme.headlineSmall,
-                    ),
-                    const SizedBox(height: 12),
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
+                final data = profileSnapshot.data ?? <String, dynamic>{};
+
+                final role = (data['role'] ?? 'resident').toString();
+                final verificationStatus =
+                (data['verification_status'] ?? 'not_submitted').toString();
+
+                final fullName =
+                (data['full_name'] ?? user.email ?? 'Пользователь')
+                    .toString();
+
+                final phone = (data['phone'] ?? '').toString();
+                final iin = (data['iin'] ?? '').toString();
+                final address = (data['full_address'] ?? '').toString();
+
+                final verificationColor =
+                _verificationColor(context, verificationStatus);
+
+                return RefreshIndicator(
+                  onRefresh: () async {
+                    _reloadProfile();
+                    await _profileFuture;
+                  },
+                  child: ListView(
+                    padding: const EdgeInsets.all(16),
+                    children: [
+                      Text(
+                        'Профиль',
+                        style: Theme.of(context).textTheme.headlineSmall,
+                      ),
+                      const SizedBox(height: 12),
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            children: [
+                              const CircleAvatar(
+                                radius: 34,
+                                child: Icon(Icons.person, size: 34),
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                fullName,
+                                style: Theme.of(context).textTheme.titleMedium,
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 6),
+                              Text(user.email ?? ''),
+                              if (phone.isNotEmpty) ...[
+                                const SizedBox(height: 6),
+                                Text(phone),
+                              ],
+                              if (iin.isNotEmpty) ...[
+                                const SizedBox(height: 6),
+                                Text('ИИН: $iin'),
+                              ],
+                              if (address.isNotEmpty) ...[
+                                const SizedBox(height: 6),
+                                Text(
+                                  address,
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Card(
                         child: Column(
                           children: [
-                            const CircleAvatar(
-                              radius: 34,
-                              child: Icon(Icons.person, size: 34),
+                            ListTile(
+                              leading:
+                              const Icon(Icons.verified_user_outlined),
+                              title: const Text('Роль'),
+                              subtitle: Text(_roleLabel(role)),
                             ),
-                            const SizedBox(height: 12),
-                            Text(
-                              data['fullName'] ?? user.displayName ?? 'Пользователь',
-                              style: Theme.of(context).textTheme.titleMedium,
+                            const Divider(height: 1),
+                            ListTile(
+                              leading:
+                              Icon(_verificationIcon(verificationStatus)),
+                              title: const Text('Статус проверки'),
+                              subtitle:
+                              Text(_verificationLabel(verificationStatus)),
+                              trailing: Container(
+                                width: 12,
+                                height: 12,
+                                decoration: BoxDecoration(
+                                  color: verificationColor,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
                             ),
-                            const SizedBox(height: 6),
-                            Text(user.email ?? ''),
-                            const SizedBox(height: 6),
-                            if ((data['phone'] ?? '').toString().isNotEmpty)
-                              Text(data['phone']),
                           ],
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    Card(
-                      child: Column(
-                        children: [
-                          ListTile(
-                            leading: const Icon(Icons.verified_user_outlined),
-                            title: const Text('Роль'),
-                            subtitle: Text(_roleLabel(role)),
+                      const SizedBox(height: 12),
+                      if (role != 'admin' && verificationStatus != 'approved')
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton(
+                            onPressed: _openVerificationPage,
+                            child: Text(
+                              verificationStatus == 'rejected'
+                                  ? 'Отправить повторно'
+                                  : verificationStatus == 'pending'
+                                  ? 'Открыть проверку'
+                                  : 'Подтвердить статус',
+                            ),
                           ),
-                          const Divider(height: 1),
-                          ListTile(
-                            leading: const Icon(Icons.pending_actions_outlined),
-                            title: const Text('Статус проверки'),
-                            subtitle: Text(_verificationLabel(verificationStatus)),
+                        ),
+                      if (role == 'admin') ...[
+                        Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.admin_panel_settings_outlined),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    'Вы вошли под ролью администратора.',
+                                    style:
+                                    Theme.of(context).textTheme.bodyMedium,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ],
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Text(
+                            _roleDescription(role, verificationStatus),
+                          ),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    if (role == 'unverified' || verificationStatus != 'approved')
+                      const SizedBox(height: 16),
                       SizedBox(
                         width: double.infinity,
-                        child: FilledButton(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const OwnershipVerificationPage(),
-                              ),
-                            );
+                        child: FilledButton.tonal(
+                          onPressed: () async {
+                            await _auth.signOut();
+                            if (!mounted) return;
+                            _reloadProfile();
                           },
-                          child: const Text('Подтвердить статус'),
+                          child: const Text('Выйти'),
                         ),
                       ),
-                    const SizedBox(height: 12),
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: role == 'owner'
-                            ? const Text(
-                          'Права владельца: полный доступ к платежам, гостям, документам и управлению квартирой.',
-                        )
-                            : role == 'tenant'
-                            ? const Text(
-                          'Права арендатора: доступ к заявкам, объявлениям, сервисам. Ограниченный доступ к разделам собственника.',
-                        )
-                            : const Text(
-                          'Вы ещё не подтверждены. Пока доступен базовый функционал.',
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton.tonal(
-                        onPressed: () async {
-                          await auth.signOut();
-                        },
-                        child: const Text('Выйти'),
-                      ),
-                    ),
-                  ],
+                      const SizedBox(height: 24),
+                    ],
+                  ),
                 );
               },
             );

@@ -2,8 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-
-import '../core/app_state_scope.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 
 class CreateRequestSheet extends StatefulWidget {
   const CreateRequestSheet({super.key});
@@ -16,6 +15,7 @@ class _CreateRequestSheetState extends State<CreateRequestSheet> {
   final _formKey = GlobalKey<FormState>();
   final _desc = TextEditingController();
   final _picker = ImagePicker();
+  final supabase.SupabaseClient _supabase = supabase.Supabase.instance.client;
 
   final _categories = const [
     'Лифт',
@@ -30,6 +30,7 @@ class _CreateRequestSheetState extends State<CreateRequestSheet> {
 
   String _selected = 'Лифт';
   final List<XFile> _photos = [];
+  bool _submitting = false;
 
   @override
   void dispose() {
@@ -47,7 +48,10 @@ class _CreateRequestSheetState extends State<CreateRequestSheet> {
   }
 
   Future<void> _takePhoto() async {
-    final img = await _picker.pickImage(source: ImageSource.camera, imageQuality: 85);
+    final img = await _picker.pickImage(
+      source: ImageSource.camera,
+      imageQuality: 85,
+    );
     if (img == null) return;
 
     setState(() {
@@ -61,21 +65,70 @@ class _CreateRequestSheetState extends State<CreateRequestSheet> {
     });
   }
 
-  void _submit() {
+  Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final state = AppStateScope.of(context);
+    final user = _supabase.auth.currentUser;
+    if (user == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Сначала войдите в аккаунт')),
+      );
+      return;
+    }
 
-    state.addRequest(
-      category: _selected,
-      description: _desc.text.trim(),
-      photoPaths: _photos.map((e) => e.path).toList(),
-    );
+    setState(() {
+      _submitting = true;
+    });
 
-    Navigator.pop(context);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Заявка создана (демо).')),
-    );
+    try {
+      final createdRequest = await _supabase
+          .from('service_requests')
+          .insert({
+        'user_id': user.id,
+        'category': _selected,
+        'description': _desc.text.trim(),
+        'status': 'new',
+      })
+          .select()
+          .single();
+
+      final requestId = createdRequest['id'] as String;
+
+      for (final photo in _photos) {
+        final file = File(photo.path);
+        final fileName =
+            '${DateTime.now().millisecondsSinceEpoch}_${photo.name}';
+        final filePath = '${user.id}/$fileName';
+
+        await _supabase.storage.from('request-photos').upload(filePath, file);
+
+        await _supabase.from('request_photos').insert({
+          'request_id': requestId,
+          'user_id': user.id,
+          'file_path': filePath,
+        });
+      }
+
+      if (!mounted) return;
+
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Заявка создана')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Ошибка создания заявки: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _submitting = false;
+        });
+      }
+    }
   }
 
   @override
@@ -88,12 +141,17 @@ class _CreateRequestSheetState extends State<CreateRequestSheet> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('Создать заявку', style: Theme.of(context).textTheme.titleLarge),
+            Text(
+              'Создать заявку',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
             const SizedBox(height: 12),
-
             Align(
               alignment: Alignment.centerLeft,
-              child: Text('Категория', style: Theme.of(context).textTheme.labelLarge),
+              child: Text(
+                'Категория',
+                style: Theme.of(context).textTheme.labelLarge,
+              ),
             ),
             const SizedBox(height: 8),
             Wrap(
@@ -104,17 +162,18 @@ class _CreateRequestSheetState extends State<CreateRequestSheet> {
                 return ChoiceChip(
                   label: Text(c),
                   selected: selected,
-                  onSelected: (_) => setState(() => _selected = c),
+                  onSelected: _submitting
+                      ? null
+                      : (_) => setState(() => _selected = c),
                 );
               }).toList(),
             ),
-
             const SizedBox(height: 14),
-
             Form(
               key: _formKey,
               child: TextFormField(
                 controller: _desc,
+                enabled: !_submitting,
                 maxLines: 4,
                 decoration: const InputDecoration(
                   labelText: 'Описание проблемы',
@@ -129,20 +188,20 @@ class _CreateRequestSheetState extends State<CreateRequestSheet> {
                 },
               ),
             ),
-
             const SizedBox(height: 14),
-
             Align(
               alignment: Alignment.centerLeft,
-              child: Text('Фото (необязательно)', style: Theme.of(context).textTheme.labelLarge),
+              child: Text(
+                'Фото (необязательно)',
+                style: Theme.of(context).textTheme.labelLarge,
+              ),
             ),
             const SizedBox(height: 8),
-
             Row(
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: _takePhoto,
+                    onPressed: _submitting ? null : _takePhoto,
                     icon: const Icon(Icons.photo_camera),
                     label: const Text('Камера'),
                   ),
@@ -150,14 +209,13 @@ class _CreateRequestSheetState extends State<CreateRequestSheet> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: _pickFromGallery,
+                    onPressed: _submitting ? null : _pickFromGallery,
                     icon: const Icon(Icons.photo_library),
                     label: const Text('Галерея'),
                   ),
                 ),
               ],
             ),
-
             if (_photos.isNotEmpty) ...[
               const SizedBox(height: 12),
               SizedBox(
@@ -189,7 +247,7 @@ class _CreateRequestSheetState extends State<CreateRequestSheet> {
                           right: 6,
                           top: 6,
                           child: InkWell(
-                            onTap: () => _removePhoto(i),
+                            onTap: _submitting ? null : () => _removePhoto(i),
                             child: Container(
                               padding: const EdgeInsets.all(4),
                               decoration: BoxDecoration(
@@ -206,22 +264,26 @@ class _CreateRequestSheetState extends State<CreateRequestSheet> {
                 ),
               ),
             ],
-
             const SizedBox(height: 14),
-
             Row(
               children: [
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: () => Navigator.pop(context),
+                    onPressed: _submitting ? null : () => Navigator.pop(context),
                     child: const Text('Отмена'),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: FilledButton(
-                    onPressed: _submit,
-                    child: const Text('Создать'),
+                    onPressed: _submitting ? null : _submit,
+                    child: _submitting
+                        ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                        : const Text('Создать'),
                   ),
                 ),
               ],
