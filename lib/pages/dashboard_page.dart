@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 
+import '../services/api_client.dart';
 import 'admin_verification_page.dart';
 import 'announcements_page.dart';
 import 'barrier_page.dart';
@@ -18,7 +18,7 @@ class DashboardPage extends StatefulWidget {
 }
 
 class _DashboardPageState extends State<DashboardPage> {
-  final supabase.SupabaseClient _supabase = supabase.Supabase.instance.client;
+  final ApiClient _api = ApiClient.instance;
 
   int _index = 0;
   bool _loadingRole = true;
@@ -32,36 +32,21 @@ class _DashboardPageState extends State<DashboardPage> {
 
   Future<void> _loadRole() async {
     try {
-      final user = _supabase.auth.currentUser;
-
-      if (user == null) {
-        if (!mounted) return;
-        setState(() {
-          _role = 'resident';
-          _loadingRole = false;
-        });
+      if (!_api.isLoggedIn) {
+        setState(() { _role = 'resident'; _loadingRole = false; });
         return;
       }
-
-      final profile = await _supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', user.id)
-          .maybeSingle();
-
+      final res = await _api.get('/auth/me');
+      final role = (res.data['role'] ?? 'resident').toString();
+      await _api.updateRole(role);
       if (!mounted) return;
-
       setState(() {
-        _role = (profile?['role'] ?? 'resident').toString();
+        _role = role;
         _loadingRole = false;
       });
     } catch (_) {
       if (!mounted) return;
-
-      setState(() {
-        _role = 'resident';
-        _loadingRole = false;
-      });
+      setState(() { _role = 'resident'; _loadingRole = false; });
     }
   }
 

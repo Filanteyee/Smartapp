@@ -1,15 +1,65 @@
-import 'dart:io';
+import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
+
+import 'api_client.dart';
+
+class AppUser {
+  final String id;
+  final String email;
+
+  const AppUser({required this.id, required this.email});
+}
 
 class AuthService {
-  final supabase.SupabaseClient _supabase = supabase.Supabase.instance.client;
+  final ApiClient _api = ApiClient.instance;
+  final _controller = StreamController<AppUser?>.broadcast();
 
-  Stream<supabase.User?> get authStateChanges =>
-      _supabase.auth.onAuthStateChange.map((event) => event.session?.user);
+  AppUser? _currentUser;
+  AppUser? get currentUser => _currentUser;
+  Stream<AppUser?> get authStateChanges => _controller.stream;
 
-  supabase.User? get currentUser => _supabase.auth.currentUser;
+  AuthService() {
+    _init();
+  }
+
+  Future<void> _init() async {
+    if (!_api.isLoggedIn) {
+      _controller.add(null);
+      return;
+    }
+
+    try {
+      final profile = await getCurrentUserProfile();
+      if (profile != null) {
+        // Обновляем JWT чтобы подтянуть актуальную роль из БД
+        try {
+          final refreshRes = await _api.post('/auth/refresh');
+          final newToken = refreshRes.data['token'] as String;
+          final newRole = (refreshRes.data['role'] as String?) ?? 'resident';
+          await _api.saveSession(
+            token: newToken,
+            userId: _api.userId!,
+            role: newRole,
+          );
+        } catch (_) {
+          // Если refresh не удался — продолжаем с текущим токеном
+        }
+
+        _currentUser = AppUser(
+          id: _api.userId!,
+          email: (profile['email'] ?? '').toString(),
+        );
+        _controller.add(_currentUser);
+        return;
+      }
+    } catch (_) {}
+
+    // Токен невалиден — выходим
+    await _api.clearSession();
+    _controller.add(null);
+  }
 
   Future<String?> registerResident({
     required String fullName,
@@ -25,31 +75,10 @@ class AuthService {
     required String fullAddress,
   }) async {
     try {
-      final response = await _supabase.auth.signUp(
-        email: email.trim(),
-        password: password.trim(),
-        data: {
-          'full_name': fullName.trim(),
-          'phone': phone.trim(),
-          'iin': iin.trim(),
-          'person_type': personType,
-          'city': city,
-          'street': street,
-          'property_type': propertyType,
-          'property_number': propertyNumber,
-          'full_address': fullAddress.trim(),
-          'role': 'resident',
-        },
-      );
-
-      final user = response.user;
-      if (user == null) {
-        return 'Не удалось создать пользователя';
-      }
-
-      await _supabase.from('profiles').update({
-        'full_name': fullName.trim(),
+      final res = await _api.post('/auth/register', data: {
         'email': email.trim(),
+        'password': password.trim(),
+        'full_name': fullName.trim(),
         'phone': phone.trim(),
         'iin': iin.trim(),
         'person_type': personType,
@@ -58,28 +87,21 @@ class AuthService {
         'property_type': propertyType,
         'property_number': propertyNumber,
         'full_address': fullAddress.trim(),
-        'role': 'resident',
-        'verification_status': 'not_submitted',
-      }).eq('id', user.id);
+      });
 
+      final token = res.data['token'] as String;
+      final userId = res.data['user_id'] as String;
+      await _api.saveSession(token: token, userId: userId, role: 'resident');
+
+      _currentUser = AppUser(id: userId, email: email.trim());
+      _controller.add(_currentUser);
       return null;
-    } on supabase.AuthException catch (e) {
-      final message = e.message.toLowerCase();
-
-      if (message.contains('already registered') ||
-          message.contains('user already registered')) {
+    } on DioException catch (e) {
+      final msg = e.response?.data?['error']?.toString() ?? '';
+      if (msg.contains('already registered') || e.response?.statusCode == 409) {
         return 'Этот email уже используется';
       }
-
-      if (message.contains('invalid email')) {
-        return 'Некорректный email';
-      }
-
-      if (message.contains('password')) {
-        return 'Слишком слабый пароль';
-      }
-
-      return e.message;
+      return msg.isNotEmpty ? msg : 'Ошибка регистрации';
     } catch (e) {
       return 'Неизвестная ошибка: $e';
     }
@@ -90,47 +112,42 @@ class AuthService {
     required String password,
   }) async {
     try {
-      await _supabase.auth.signInWithPassword(
-        email: email.trim(),
-        password: password.trim(),
-      );
-      return null;
-    } on supabase.AuthException catch (e) {
-      final message = e.message.toLowerCase();
+      final res = await _api.post('/auth/login', data: {
+        'email': email.trim(),
+        'password': password.trim(),
+      });
 
-      if (message.contains('invalid login credentials')) {
+      final token = res.data['token'] as String;
+      final userId = res.data['user_id'] as String;
+      final role = res.data['role'] as String? ?? 'resident';
+      await _api.saveSession(token: token, userId: userId, role: role);
+
+      _currentUser = AppUser(id: userId, email: email.trim());
+      _controller.add(_currentUser);
+      return null;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 401) {
         return 'Неверный email или пароль';
       }
-
-      if (message.contains('email not confirmed')) {
-        return 'Подтвердите email перед входом';
-      }
-
-      if (message.contains('invalid email')) {
-        return 'Некорректный email';
-      }
-
-      return e.message;
+      return e.response?.data?['error']?.toString() ?? 'Ошибка входа';
     } catch (e) {
       return 'Неизвестная ошибка: $e';
     }
   }
 
   Future<void> signOut() async {
-    await _supabase.auth.signOut();
+    await _api.clearSession();
+    _currentUser = null;
+    _controller.add(null);
   }
 
   Future<Map<String, dynamic>?> getCurrentUserProfile() async {
-    final user = _supabase.auth.currentUser;
-    if (user == null) return null;
-
-    final data = await _supabase
-        .from('profiles')
-        .select()
-        .eq('id', user.id)
-        .maybeSingle();
-
-    return data;
+    try {
+      final res = await _api.get('/auth/me');
+      return Map<String, dynamic>.from(res.data as Map);
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<String?> submitVerificationRequest({
@@ -138,54 +155,35 @@ class AuthService {
     required List<PlatformFile> documents,
     String? comment,
   }) async {
+    if (documents.isEmpty) return 'Прикрепите хотя бы один документ';
+
     try {
-      final user = _supabase.auth.currentUser;
-      if (user == null) return 'Сначала войдите в аккаунт';
-
-      if (documents.isEmpty) {
-        return 'Прикрепите хотя бы один документ';
-      }
-
-      final verificationRequest = await _supabase
-          .from('verification_requests')
-          .insert({
-        'user_id': user.id,
+      final res = await _api.post('/verification/requests', data: {
         'requested_role': requestedRole,
         'comment': comment?.trim() ?? '',
-        'status': 'pending',
-      })
-          .select()
-          .single();
+      });
 
-      final verificationRequestId = verificationRequest['id'] as String;
+      final verId = res.data['id'] as String;
 
+      final formData = FormData();
       for (final doc in documents) {
         if (doc.path == null) continue;
-
-        final file = File(doc.path!);
-        final fileName =
-            '${DateTime.now().millisecondsSinceEpoch}_${doc.name}';
-        final filePath = '${user.id}/$fileName';
-
-        await _supabase.storage
-            .from('verification-docs')
-            .upload(filePath, file);
-
-        await _supabase.from('verification_documents').insert({
-          'verification_request_id': verificationRequestId,
-          'file_path': filePath,
-          'file_name': doc.name,
-          'file_size': doc.size,
-        });
+        formData.files.add(MapEntry(
+          'documents',
+          await MultipartFile.fromFile(doc.path!, filename: doc.name),
+        ));
       }
 
-      await _supabase.from('profiles').update({
-        'verification_status': 'pending',
-      }).eq('id', user.id);
-
+      await _api.postForm('/verification/requests/$verId/documents', formData);
       return null;
+    } on DioException catch (e) {
+      return e.response?.data?['error']?.toString() ?? 'Ошибка отправки документов';
     } catch (e) {
       return 'Ошибка отправки документов: $e';
     }
+  }
+
+  void dispose() {
+    _controller.close();
   }
 }

@@ -1,0 +1,77 @@
+import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+class ApiClient {
+  static String get baseUrl {
+    if (kIsWeb) return 'http://localhost:8080/api/v1';
+    // На Android-эмуляторе 10.0.2.2 — это хост-машина
+    return 'http://10.0.2.2:8080/api/v1';
+  }
+
+  static ApiClient? _instance;
+  static ApiClient get instance => _instance!;
+
+  static Future<void> init() async {
+    final prefs = await SharedPreferences.getInstance();
+    _instance = ApiClient._(prefs);
+  }
+
+  final SharedPreferences _prefs;
+  late final Dio _dio;
+
+  ApiClient._(this._prefs) {
+    _dio = Dio(BaseOptions(
+      baseUrl: baseUrl,
+      connectTimeout: const Duration(seconds: 10),
+      receiveTimeout: const Duration(seconds: 10),
+    ));
+
+    _dio.interceptors.add(InterceptorsWrapper(
+      onRequest: (options, handler) {
+        final token = _prefs.getString('token');
+        if (token != null) {
+          options.headers['Authorization'] = 'Bearer $token';
+        }
+        handler.next(options);
+      },
+    ));
+  }
+
+  String? get token => _prefs.getString('token');
+  String? get userId => _prefs.getString('user_id');
+  String? get userRole => _prefs.getString('user_role');
+  bool get isLoggedIn => token != null;
+
+  Future<void> saveSession({
+    required String token,
+    required String userId,
+    required String role,
+  }) async {
+    await _prefs.setString('token', token);
+    await _prefs.setString('user_id', userId);
+    await _prefs.setString('user_role', role);
+  }
+
+  Future<void> updateRole(String role) async {
+    await _prefs.setString('user_role', role);
+  }
+
+  Future<void> clearSession() async {
+    await _prefs.remove('token');
+    await _prefs.remove('user_id');
+    await _prefs.remove('user_role');
+  }
+
+  Future<Response> get(String path, {Map<String, dynamic>? params}) =>
+      _dio.get(path, queryParameters: params);
+
+  Future<Response> post(String path, {dynamic data}) =>
+      _dio.post(path, data: data);
+
+  Future<Response> put(String path, {dynamic data}) =>
+      _dio.put(path, data: data);
+
+  Future<Response> postForm(String path, FormData data) =>
+      _dio.post(path, data: data);
+}
