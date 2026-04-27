@@ -11,8 +11,6 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  static const Color _accent = Color(0xFFF9793D);
-
   final _authService = AuthService();
   final _formKey = GlobalKey<FormState>();
 
@@ -64,15 +62,8 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F7F7),
       appBar: AppBar(
-        backgroundColor: const Color(0xFFF7F7F7),
-        foregroundColor: _accent,
-        elevation: 0,
-        title: const Text(
-          'Вход',
-          style: TextStyle(color: Colors.black),
-        ),
+        title: const Text('Вход'),
       ),
       body: SafeArea(
         child: GestureDetector(
@@ -81,22 +72,19 @@ class _LoginPageState extends State<LoginPage> {
             padding: const EdgeInsets.all(24),
             children: [
               const SizedBox(height: 24),
-              const Text(
+              Text(
                 'Добро пожаловать',
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 24,
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.w700,
-                  color: Colors.black,
                 ),
               ),
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 'Войдите в аккаунт, чтобы продолжить',
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.black54,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
               const SizedBox(height: 32),
@@ -104,10 +92,10 @@ class _LoginPageState extends State<LoginPage> {
                 key: _formKey,
                 child: Column(
                   children: [
-                    _LightField(
+                    TextFormField(
                       controller: _emailController,
-                      label: 'Email',
                       keyboardType: TextInputType.emailAddress,
+                      decoration: const InputDecoration(labelText: 'Email'),
                       validator: (value) {
                         final text = value?.trim() ?? '';
                         if (text.isEmpty) return 'Введите email';
@@ -116,15 +104,16 @@ class _LoginPageState extends State<LoginPage> {
                       },
                     ),
                     const SizedBox(height: 14),
-                    _LightField(
+                    TextFormField(
                       controller: _passwordController,
-                      label: 'Пароль',
                       obscureText: _obscure,
-                      suffix: IconButton(
-                        onPressed: () => setState(() => _obscure = !_obscure),
-                        icon: Icon(
-                          _obscure ? Icons.visibility_off : Icons.visibility,
-                          color: Colors.grey,
+                      decoration: InputDecoration(
+                        labelText: 'Пароль',
+                        suffixIcon: IconButton(
+                          onPressed: () => setState(() => _obscure = !_obscure),
+                          icon: Icon(
+                            _obscure ? Icons.visibility_off : Icons.visibility,
+                          ),
                         ),
                       ),
                       validator: (value) {
@@ -135,76 +124,20 @@ class _LoginPageState extends State<LoginPage> {
                       },
                     ),
                     const SizedBox(height: 24),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 56,
-                      child: FilledButton(
-                        style: FilledButton.styleFrom(
-                          backgroundColor: _accent,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ),
-                        onPressed: _loading ? null : _login,
-                        child: Text(_loading ? 'Вход...' : 'Войти'),
-                      ),
+                    FilledButton(
+                      onPressed: _loading ? null : _login,
+                      child: Text(_loading ? 'Вход...' : 'Войти'),
                     ),
                     const SizedBox(height: 12),
                     TextButton(
                       onPressed: _loading ? null : _openRegister,
-                      child: const Text(
-                        'Нет аккаунта? Зарегистрироваться',
-                        style: TextStyle(color: _accent),
-                      ),
+                      child: const Text('Нет аккаунта? Зарегистрироваться'),
                     ),
                   ],
                 ),
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _LightField extends StatelessWidget {
-  final TextEditingController controller;
-  final String label;
-  final TextInputType? keyboardType;
-  final bool obscureText;
-  final Widget? suffix;
-  final String? Function(String?)? validator;
-
-  const _LightField({
-    required this.controller,
-    required this.label,
-    this.keyboardType,
-    this.obscureText = false,
-    this.suffix,
-    this.validator,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return TextFormField(
-      controller: controller,
-      keyboardType: keyboardType,
-      obscureText: obscureText,
-      validator: validator,
-      decoration: InputDecoration(
-        labelText: label,
-        filled: true,
-        fillColor: Colors.white,
-        suffixIcon: suffix,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderSide: const BorderSide(color: Color(0xFFD9D9D9)),
-          borderRadius: BorderRadius.circular(14),
         ),
       ),
     );

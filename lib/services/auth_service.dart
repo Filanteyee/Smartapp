@@ -24,6 +24,22 @@ class AuthService {
     _init();
   }
 
+  /// Обновляет JWT, подтягивая актуальную роль из БД.
+  /// Вызывать при возврате приложения на экран.
+  Future<void> refreshToken() async {
+    if (!_api.isLoggedIn) return;
+    try {
+      final res = await _api.post('/auth/refresh');
+      final newToken = res.data['token'] as String;
+      final newRole = (res.data['role'] as String?) ?? 'resident';
+      await _api.saveSession(
+        token: newToken,
+        userId: _api.userId!,
+        role: newRole,
+      );
+    } catch (_) {}
+  }
+
   Future<void> _init() async {
     if (!_api.isLoggedIn) {
       _controller.add(null);

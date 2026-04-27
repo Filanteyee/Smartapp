@@ -13,7 +13,7 @@ class ServiceRequestsPage extends StatefulWidget {
 class _ServiceRequestsPageState extends State<ServiceRequestsPage> {
   final ApiClient _api = ApiClient.instance;
 
-  late final bool _isAdmin = _api.userRole == 'admin';
+  bool get _isAdmin => _api.userRole == 'admin';
   String _query = '';
   String? _filter;
   bool _loading = true;

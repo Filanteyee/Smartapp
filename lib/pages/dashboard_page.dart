@@ -90,9 +90,6 @@ class _DashboardPageState extends State<DashboardPage> {
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(_titleFor(_index, _role)),
-      ),
       body: _pages[_index],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _index,
@@ -103,22 +100,6 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  String _titleFor(int index, String role) {
-    switch (index) {
-      case 0:
-        return role == 'admin' ? 'Панель администратора' : 'Главная';
-      case 1:
-        return 'Заявки';
-      case 2:
-        return 'Сервисы';
-      case 3:
-        return 'Платежи';
-      case 4:
-        return 'Профиль';
-      default:
-        return 'Smart ЖК';
-    }
-  }
 }
 
 class _HomeOverviewTab extends StatelessWidget {
@@ -130,14 +111,14 @@ class _HomeOverviewTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(_isAdmin ? 'Панель администратора' : 'Главная'),
+      ),
+      body: SafeArea(
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Text(
-            _isAdmin ? 'Панель администратора' : 'Smart ЖК',
-            style: Theme.of(context).textTheme.headlineSmall,
-          ),
           const SizedBox(height: 6),
           Text(
             _isAdmin
@@ -187,7 +168,7 @@ class _HomeOverviewTab extends StatelessWidget {
               children: [
                 _ActionCard(
                   title: 'Управление заявками',
-                  subtitle: 'Меняй статусы new / in_progress / done',
+                  subtitle: '',
                   icon: Icons.build_circle_outlined,
                   onTap: () {
                     Navigator.push(
@@ -200,7 +181,7 @@ class _HomeOverviewTab extends StatelessWidget {
                 ),
                 _ActionCard(
                   title: 'Проверка документов',
-                  subtitle: 'Подтверждай или отклоняй жителей',
+                  subtitle: '',
                   icon: Icons.verified_user_outlined,
                   onTap: () {
                     Navigator.push(
@@ -251,15 +232,6 @@ class _HomeOverviewTab extends StatelessWidget {
                   },
                 ),
               ],
-            ),
-            const SizedBox(height: 14),
-            const Card(
-              child: Padding(
-                padding: EdgeInsets.all(14),
-                child: Text(
-                  'Сейчас роль admin уже влияет на систему: администратор видит все заявки, может менять их статусы, проверять документы жителей и тестировать модуль шлагбаума.',
-                ),
-              ),
             ),
           ] else ...[
             Row(
@@ -344,6 +316,7 @@ class _HomeOverviewTab extends StatelessWidget {
           ],
         ],
       ),
+    ),
     );
   }
 }
@@ -404,13 +377,15 @@ class _ActionGrid extends StatelessWidget {
       final right = i + 1 < children.length ? children[i + 1] : null;
 
       rows.add(
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(child: left),
-            const SizedBox(width: 12),
-            Expanded(child: right ?? const SizedBox()),
-          ],
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(child: left),
+              const SizedBox(width: 12),
+              Expanded(child: right ?? const SizedBox()),
+            ],
+          ),
         ),
       );
 
@@ -438,41 +413,39 @@ class _ActionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 132,
-      child: Card(
-        child: InkWell(
-          borderRadius: BorderRadius.circular(18),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(icon, size: 24),
-                const SizedBox(height: 12),
+    return Card(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 24),
+              const SizedBox(height: 10),
+              Text(
+                title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              if (subtitle.isNotEmpty) ...[
+                const SizedBox(height: 4),
                 Text(
-                  title,
+                  subtitle,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
-                const SizedBox(height: 6),
-                Expanded(
-                  child: Text(
-                    subtitle,
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                const Align(
-                  alignment: Alignment.bottomRight,
-                  child: Icon(Icons.chevron_right),
+                  style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],
-            ),
+              const SizedBox(height: 8),
+              const Align(
+                alignment: Alignment.bottomRight,
+                child: Icon(Icons.chevron_right),
+              ),
+            ],
           ),
         ),
       ),

@@ -1,8 +1,10 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_pdfview/flutter_pdfview.dart';
 import 'package:http/http.dart' as http;
+import 'package:open_file/open_file.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../services/api_client.dart';
@@ -59,66 +61,146 @@ class _AdminVerificationPageState extends State<AdminVerificationPage> {
   Future<void> _openDocumentsDialog(_VerificationRequestItem request) async {
     await showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Прикреплённые документы'),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: request.documents.isEmpty
-              ? const Text('Документы не найдены')
-              : ListView.separated(
-            shrinkWrap: true,
-            itemCount: request.documents.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 10),
-            itemBuilder: (context, index) {
-              final doc = request.documents[index];
-              return ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.insert_drive_file_outlined),
-                title: Text(doc.fileName.isEmpty ? 'Без имени' : doc.fileName, maxLines: 1, overflow: TextOverflow.ellipsis),
-                subtitle: Text(_formatFileSize(doc.fileSize)),
-                trailing: OutlinedButton(onPressed: () => _openFile(doc), child: const Text('Открыть')),
-              );
-            },
+      builder: (dialogCtx) => Dialog(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Прикреплённые документы', style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 16),
+              if (request.documents.isEmpty)
+                const Text('Документы не найдены')
+              else
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 300),
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: request.documents.length,
+                    itemBuilder: (_, index) {
+                      final doc = request.documents[index];
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.insert_drive_file_outlined, size: 20),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    doc.fileName.isEmpty ? 'Без имени' : doc.fileName,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(context).textTheme.bodyMedium,
+                                  ),
+                                  Text(
+                                    _formatFileSize(doc.fileSize),
+                                    style: Theme.of(context).textTheme.bodySmall,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            TextButton(
+                              onPressed: () => _openFile(doc, dialogCtx),
+                              child: const Text('Открыть'),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () => Navigator.of(dialogCtx).pop(),
+                  child: const Text('Закрыть'),
+                ),
+              ),
+            ],
           ),
         ),
-        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Закрыть'))],
       ),
     );
   }
 
-  Future<void> _openFile(_VerificationDocumentItem doc) async {
+  /// На Android-эмуляторе localhost — это сам эмулятор, а не хост-машина.
+  /// Заменяем на 10.0.2.2, чтобы достучаться до сервера.
+  String _fixUrl(String url) => url
+      .replaceFirst('http://localhost:', 'http://10.0.2.2:')
+      .replaceFirst('http://127.0.0.1:', 'http://10.0.2.2:');
+
+  Future<void> _openFile(_VerificationDocumentItem doc, BuildContext dialogContext) async {
+    Navigator.of(dialogContext).pop();
+
+    final rawUrl = doc.url.isNotEmpty ? doc.url : '${ApiClient.baseUrl}/uploads/${doc.filePath}';
+    final url = _fixUrl(rawUrl);
+    final fileName = doc.fileName.isNotEmpty ? doc.fileName : 'document';
+    final lowerName = fileName.toLowerCase();
+    final isImage = lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg') || lowerName.endsWith('.png');
+
+    // Все форматы скачиваем через http.get — единый путь с понятными сообщениями об ошибках
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Загрузка…'), duration: Duration(seconds: 60)),
+    );
+
     try {
-      final url = doc.url.isNotEmpty ? doc.url : '${ApiClient.baseUrl}/uploads/${doc.filePath}';
       final response = await http.get(Uri.parse(url));
-      final dir = await getTemporaryDirectory();
-      final file = File('${dir.path}/${doc.fileName.isEmpty ? 'file' : doc.fileName}');
-      await file.writeAsBytes(response.bodyBytes);
 
       if (!mounted) return;
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
-      final lowerName = doc.fileName.toLowerCase();
-      final isImage = lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg') || lowerName.endsWith('.png');
-      final isPdf = lowerName.endsWith('.pdf');
+      if (response.statusCode != 200) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Файл не найден (${response.statusCode})')),
+        );
+        return;
+      }
 
       if (isImage) {
         Navigator.push(context, MaterialPageRoute(
           builder: (_) => Scaffold(
             appBar: AppBar(title: const Text('Просмотр изображения')),
-            body: Center(child: InteractiveViewer(minScale: 0.5, maxScale: 4, child: Image.file(file))),
+            body: InteractiveViewer(
+              minScale: 0.5,
+              maxScale: 4,
+              child: Center(child: Image.memory(response.bodyBytes)),
+            ),
           ),
         ));
-      } else if (isPdf) {
+      } else if (lowerName.endsWith('.pdf')) {
         Navigator.push(context, MaterialPageRoute(
-          builder: (_) => Scaffold(
-            appBar: AppBar(title: const Text('PDF документ')),
-            body: PDFView(filePath: file.path),
+          builder: (_) => _PdfViewerPage(
+            title: fileName,
+            bytes: response.bodyBytes,
           ),
         ));
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Формат не поддерживается')));
+        // Остальные форматы (docx, xlsx и т.д.) открываем нативным приложением
+        final dir = await getTemporaryDirectory();
+        final file = File('${dir.path}/$fileName');
+        await file.writeAsBytes(response.bodyBytes);
+        if (!mounted) return;
+        final result = await OpenFile.open(file.path);
+        if (result.type != ResultType.done) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Нет приложения для формата: ${result.message}')),
+          );
+        }
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка открытия файла: $e')));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Ошибка загрузки: $e')),
+      );
     }
   }
 
@@ -335,6 +417,57 @@ class _ErrorBlock extends StatelessWidget {
             FilledButton(onPressed: onRetry, child: const Text('Повторить')),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _PdfViewerPage extends StatefulWidget {
+  final String title;
+  final List<int> bytes;
+
+  const _PdfViewerPage({required this.title, required this.bytes});
+
+  @override
+  State<_PdfViewerPage> createState() => _PdfViewerPageState();
+}
+
+class _PdfViewerPageState extends State<_PdfViewerPage> {
+  bool _ready = false;
+  String? _error;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text(widget.title, maxLines: 1, overflow: TextOverflow.ellipsis)),
+      body: Stack(
+        children: [
+          PDFView(
+            pdfData: Uint8List.fromList(widget.bytes),
+            enableSwipe: true,
+            swipeHorizontal: false,
+            autoSpacing: true,
+            onRender: (_) => setState(() => _ready = true),
+            onError: (e) => setState(() => _error = e.toString()),
+            onPageError: (_, e) => setState(() => _error = e.toString()),
+          ),
+          if (!_ready && _error == null)
+            const Center(child: CircularProgressIndicator()),
+          if (_error != null)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.broken_image_outlined, size: 48),
+                    const SizedBox(height: 12),
+                    Text('Не удалось отобразить PDF: $_error', textAlign: TextAlign.center),
+                  ],
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

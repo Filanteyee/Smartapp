@@ -4,6 +4,7 @@ import 'core/app_state.dart';
 import 'core/app_state_scope.dart';
 import 'pages/dashboard_page.dart';
 import 'services/api_client.dart';
+import 'services/auth_service.dart';
 import 'theme/app_theme.dart';
 
 Future<void> main() async {
@@ -19,12 +20,29 @@ class _Root extends StatefulWidget {
   State<_Root> createState() => _RootState();
 }
 
-class _RootState extends State<_Root> {
+class _RootState extends State<_Root> with WidgetsBindingObserver {
   final AppState _appState = AppState();
+  final AuthService _auth = AuthService();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // При возврате приложения на экран обновляем JWT с актуальной ролью из БД
+    if (state == AppLifecycleState.resumed) {
+      _auth.refreshToken();
+    }
+  }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _appState.dispose();
+    _auth.dispose();
     super.dispose();
   }
 

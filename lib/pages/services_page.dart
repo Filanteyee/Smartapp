@@ -19,12 +19,12 @@ class ServicesPage extends StatelessWidget {
     ];
 
     return Scaffold(
+      appBar: AppBar(title: const Text('Сервисы')),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            Text('Сервисы', style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 10),
+            const SizedBox(height: 4),
 
             Row(
               children: [
